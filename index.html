@@ -44,14 +44,14 @@
         const centerY = canvas.height / 2;
 
         // プレイヤー（壁）の設定
-        const wallRadius = 50;
+        const wallRadius = 30;
         const wallWidth = 10;
 
         // 壁の角度（初期値は上を向くように設定: -90度）
         let wallAngle = -Math.PI / 2;
 
         // 壁の広さ（90度分 = PI/2）
-        const wallSize = Math.PI / 2;
+        const wallSize = Math.PI / 1.5;
 
         // ボール管理
         let balls = [];
@@ -100,39 +100,78 @@
             spawnRate = 60;
             frameCount = 0;
         }
-
+        // --- ボールクラス（動きのバリエーションを追加） ---
         class Ball {
             constructor() {
-                // 4方向（0:上, 1:右, 2:下, 3:左）から出現
-                const edge = Math.floor(Math.random() * 4);
-                const speed = 3 + (score / 300); // 少しずつ速度が上がる
-
-                if (edge === 0) { // 上から
-                    this.x = centerX;
-                    this.y = 0;
-                } else if (edge === 1) { // 右から
-                    this.x = canvas.width;
-                    this.y = centerY;
-                } else if (edge === 2) { // 下から
-                    this.x = centerX;
-                    this.y = canvas.height;
-                } else { // 左から
-                    this.x = 0;
-                    this.y = centerY;
+                // 3種類の動きをランダムに決定
+                // 0: ストレート(赤), 1: スネーク(紫), 2: スパイラル(黄)
+                const typeRandom = Math.random();
+                if (typeRandom < 0.6) {
+                    this.type = 'straight';
+                } else if (typeRandom < 0.8) {
+                    this.type = 'snake';
+                } else {
+                    this.type = 'spiral';
                 }
 
-                // 中心へ向かう速度
-                const angle = Math.atan2(centerY - this.y, centerX - this.x);
-                this.vx = Math.cos(angle) * speed;
-                this.vy = Math.sin(angle) * speed;
+                // 基本設定
+                const edge = Math.floor(Math.random() * 4);
+                const baseSpeed = 2 + (score / 20); // スピード調整
 
+                // 出現位置の決定
+                if (edge === 0) { this.x = centerX; this.y = -20; }
+                else if (edge === 1) { this.x = canvas.width + 20; this.y = centerY; }
+                else if (edge === 2) { this.x = centerX; this.y = canvas.height + 20; }
+                else { this.x = -20; this.y = centerY; }
+
+                // 動きの計算用変数
+                this.angleToCenter = Math.atan2(centerY - this.y, centerX - this.x);
+                this.currentDist = Math.sqrt((this.x - centerX) ** 2 + (this.y - centerY) ** 2);
+                this.speed = baseSpeed;
                 this.radius = 5;
                 this.active = true;
+                this.time = 0; // 経過時間（クネクネ計算用）
+
+                // スパイラル用の初期角度
+                this.spiralAngle = this.angleToCenter;
             }
 
             update() {
-                this.x += this.vx;
-                this.y += this.vy;
+                this.time += 0.1; // 時間を進める
+
+                // --- 動きのロジック分岐 ---
+
+                if (this.type === 'straight') {
+                    // まっすぐ進む
+                    this.x += Math.cos(this.angleToCenter) * this.speed;
+                    this.y += Math.sin(this.angleToCenter) * this.speed;
+
+                } else if (this.type === 'snake') {
+                    // 中心に向かうベクトル
+                    const vx = Math.cos(this.angleToCenter) * this.speed;
+                    const vy = Math.sin(this.angleToCenter) * this.speed;
+
+                    // 横揺れ（垂直方向のベクトル）を作成
+                    // Math.sin(this.time) で揺れを作り、揺れ幅を少しずつ大きくする
+                    const wobble = Math.sin(this.time) * 3;
+
+                    // 進行方向に対して垂直な動きを足す (-vy, vx)
+                    this.x += vx - (Math.sin(this.angleToCenter) * wobble);
+                    this.y += vy + (Math.cos(this.angleToCenter) * wobble);
+
+                } else if (this.type === 'spiral') {
+                    // 中心に向かって距離を縮める
+                    this.currentDist -= this.speed * 0.8; // 少しゆっくり接近
+
+                    // 角度を回す（距離が近いほど速く回る演出）
+                    this.spiralAngle += 0.03;
+
+                    // 極座標(距離と角度)から座標(x,y)に変換
+                    this.x = centerX + Math.cos(this.spiralAngle + Math.PI) * this.currentDist;
+                    this.y = centerY + Math.sin(this.spiralAngle + Math.PI) * this.currentDist;
+                }
+
+                // --- ここから下は共通（当たり判定） ---
 
                 const dx = this.x - centerX;
                 const dy = this.y - centerY;
@@ -140,21 +179,18 @@
 
                 // 1. 壁との衝突判定
                 if (dist < wallRadius + wallWidth && dist > wallRadius - wallWidth) {
-                    // ボールの角度を計算
                     let ballAngle = Math.atan2(dy, dx);
-
-                    // 角度差を計算
                     let angleDiff = ballAngle - wallAngle;
-                    // -PI ~ PI に正規化
+
                     while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
                     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
 
-                    // 壁の範囲内（±45度 = PI/4）なら防御成功
-                    // wallSize は PI/2 なので、その半分の範囲を見ます
                     if (Math.abs(angleDiff) < wallSize / 2) {
                         this.active = false;
+                        //一つ当たりの点数
                         score += 10;
-                        if (score % 50 === 0 && spawnRate > 15) spawnRate -= 2;
+                        // 難易度調整
+                        if (score % 5 === 0 && spawnRate > 15) spawnRate -= 2;
                     }
                 }
 
@@ -167,7 +203,16 @@
             draw() {
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fillStyle = '#ff4444';
+
+                // タイプによって色を変える
+                if (this.type === 'straight') {
+                    ctx.fillStyle = '#ff4444'; // 赤
+                } else if (this.type === 'snake') {
+                    ctx.fillStyle = '#ff00ff'; // 紫
+                } else if (this.type === 'spiral') {
+                    ctx.fillStyle = '#ffff00'; // 黄色
+                }
+
                 ctx.fill();
                 ctx.closePath();
             }
