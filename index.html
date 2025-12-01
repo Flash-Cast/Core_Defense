@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Asteroids Defense Game</title>
+    <style>
+        body {
+            background-color: #222;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Courier New', sans-serif;
+            overflow: hidden;
+            /* スクロールバーを消す */
+        }
+
+        canvas {
+            background-color: #000;
+            border: 2px solid #555;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+
+    <script>
+        // --- 変数と設定 ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // ゲームの状態 ('start', 'playing', 'gameover')
+        let gameState = 'start';
+        let score = 0;
+
+        // 中心座標
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        // プレイヤー（壁）の設定
+        const wallRadius = 50;
+        const wallWidth = 10;
+
+        // 壁の角度（初期値は上を向くように設定: -90度）
+        let wallAngle = -Math.PI / 2;
+
+        // 壁の広さ（90度分 = PI/2）
+        const wallSize = Math.PI / 2;
+
+        // ボール管理
+        let balls = [];
+        let spawnRate = 60;
+        let frameCount = 0;
+
+        // --- イベントリスナー（キーボード操作） ---
+        // 押した方向に壁を移動
+        document.addEventListener('keydown', (e) => {
+            // ゲーム開始・リセット
+            if (e.code === 'Space') {
+                if (gameState === 'start' || gameState === 'gameover') {
+                    resetGame();
+                    gameState = 'playing';
+                }
+                return; // スペースキーのときは壁を動かさない
+            }
+
+            // プレイ中のみ操作可能
+            if (gameState === 'playing') {
+                // 上 (Up / W)
+                if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+                    wallAngle = -Math.PI / 2;
+                }
+                // 右 (Right / D)
+                else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+                    wallAngle = 0;
+                }
+                // 下 (Down / S)
+                else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                    wallAngle = Math.PI / 2;
+                }
+                // 左 (Left / A)
+                else if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+                    wallAngle = Math.PI;
+                }
+            }
+        });
+
+        // --- ゲームロジック ---
+
+        function resetGame() {
+            score = 0;
+            balls = [];
+            wallAngle = -Math.PI / 2; // リセット時も上向きに
+            spawnRate = 60;
+            frameCount = 0;
+        }
+
+        class Ball {
+            constructor() {
+                // 4方向（0:上, 1:右, 2:下, 3:左）から出現
+                const edge = Math.floor(Math.random() * 4);
+                const speed = 3 + (score / 300); // 少しずつ速度が上がる
+
+                if (edge === 0) { // 上から
+                    this.x = centerX;
+                    this.y = 0;
+                } else if (edge === 1) { // 右から
+                    this.x = canvas.width;
+                    this.y = centerY;
+                } else if (edge === 2) { // 下から
+                    this.x = centerX;
+                    this.y = canvas.height;
+                } else { // 左から
+                    this.x = 0;
+                    this.y = centerY;
+                }
+
+                // 中心へ向かう速度
+                const angle = Math.atan2(centerY - this.y, centerX - this.x);
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+
+                this.radius = 5;
+                this.active = true;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                const dx = this.x - centerX;
+                const dy = this.y - centerY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                // 1. 壁との衝突判定
+                if (dist < wallRadius + wallWidth && dist > wallRadius - wallWidth) {
+                    // ボールの角度を計算
+                    let ballAngle = Math.atan2(dy, dx);
+
+                    // 角度差を計算
+                    let angleDiff = ballAngle - wallAngle;
+                    // -PI ~ PI に正規化
+                    while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+
+                    // 壁の範囲内（±45度 = PI/4）なら防御成功
+                    // wallSize は PI/2 なので、その半分の範囲を見ます
+                    if (Math.abs(angleDiff) < wallSize / 2) {
+                        this.active = false;
+                        score += 10;
+                        if (score % 50 === 0 && spawnRate > 15) spawnRate -= 2;
+                    }
+                }
+
+                // 2. 中心到達
+                if (dist < 10) {
+                    gameState = 'gameover';
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff4444';
+                ctx.fill();
+                ctx.closePath();
+            }
+        }
+
+        function update() {
+            if (gameState === 'playing') {
+
+                frameCount++;
+                if (frameCount % spawnRate === 0) {
+                    balls.push(new Ball());
+                }
+
+                balls.forEach(ball => ball.update());
+                balls = balls.filter(ball => ball.active);
+            }
+        }
+
+        function draw() {
+            // 残像効果
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 中心
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+            // ゲームオーバーなら赤、それ以外は青
+            if (gameState === 'gameover') {
+                ctx.fillStyle = '#ff0000'; // 赤 (被弾！)
+            } else {
+                ctx.fillStyle = '#00ffff'; // 青 (通常)
+            }
+            ctx.fill();
+            ctx.closePath();
+
+            // プレイヤーの壁
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, wallRadius, wallAngle - wallSize / 2, wallAngle + wallSize / 2);
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = wallWidth;
+            ctx.stroke();
+            ctx.closePath();
+
+            // ガイド線（今の方向をわかりやすくするため、薄く表示）
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX + Math.cos(wallAngle) * (wallRadius - 10), centerY + Math.sin(wallAngle) * (wallRadius - 10));
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+
+            if (gameState === 'playing' || gameState === 'gameover') {
+                balls.forEach(ball => ball.draw());
+            }
+
+            // テキスト表示
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'left';
+            ctx.font = '20px Courier New';
+            ctx.fillText(`SCORE: ${score}`, 20, 30);
+
+            ctx.textAlign = 'center';
+            if (gameState === 'start') {
+                ctx.font = '40px Courier New';
+                ctx.fillText("CORE DEFENSE", centerX, centerY - 50);
+                ctx.font = '20px Courier New';
+                ctx.fillText("PRESS SPACE TO START", centerX, centerY + 50);
+                ctx.fillText("Use Arrow Keys or WASD", centerX, centerY + 80);
+            } else if (gameState === 'gameover') {
+                ctx.fillStyle = 'red';
+                ctx.font = '40px Courier New';
+                ctx.fillText("GAME OVER", centerX, centerY - 50);
+                ctx.fillStyle = 'white';
+                ctx.font = '20px Courier New';
+                ctx.fillText(`RESULT SCORE: ${score}`, centerX, centerY + 20);
+                ctx.fillText("PRESS SPACE TO RETRY", centerX, centerY + 60);
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+
+</html>
