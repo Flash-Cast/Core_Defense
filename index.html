@@ -55,7 +55,7 @@
 
         // ボール管理
         let balls = [];
-        let spawnRate = 60;
+        let spawnRate = 80;
         let frameCount = 0;
 
         // --- イベントリスナー（キーボード操作） ---
@@ -106,9 +106,9 @@
                 // 3種類の動きをランダムに決定
                 // 0: ストレート(赤), 1: スネーク(紫), 2: スパイラル(黄)
                 const typeRandom = Math.random();
-                if (typeRandom < 0.6) {
+                if (typeRandom < 0.8) {
                     this.type = 'straight';
-                } else if (typeRandom < 0.8) {
+                } else if (typeRandom < 0.9) {
                     this.type = 'snake';
                 } else {
                     this.type = 'spiral';
@@ -116,7 +116,7 @@
 
                 // 基本設定
                 const edge = Math.floor(Math.random() * 4);
-                const baseSpeed = 2 + (score / 300); // スピード調整
+                const baseSpeed = 2 + (score / 1000); // スピード調整
 
                 // 出現位置の決定
                 if (edge === 0) { this.x = centerX; this.y = -20; }
